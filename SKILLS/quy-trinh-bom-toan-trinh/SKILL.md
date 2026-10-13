@@ -30,10 +30,25 @@ Vai của skill này là **Điều phối và kiểm duyệt**. Skill không t�
 | 2 | DỪNG (chốt cứng không đạt) | Xem phần **Khi DỪNG** bên dưới |
 | 4 | Hoàn tất | Báo cáo theo mẫu ở cuối skill, rồi kết thúc |
 
+## Đội và tên gọi
+Agent đang đọc skill này tên là **bom-dieu-phoi**. Việc của bom-dieu-phoi là điều phối và kiểm duyệt. Các bước được chạy tuần tự bên trong `dieu_phoi.py`, có Gác cổng bằng code chấm. Sub-agent **chỉ được gọi khi có bước DỪNG**, chỉ đọc, dùng model nhỏ.
+
+| Bước | Sub-agent điều tra | Thẻ hướng dẫn |
+|---|---|---|
+| B0 Lọc nguồn | `bom-b0-loc-nguon` | `the/B0.md` |
+| B1 Master PI | `bom-b1-boc-pi` | `the/B1.md` |
+| B2 BOM ERP, mapping, Mẫu 07 | `bom-b2-tao-bom` | `the/B2.md` |
+| B2b Pivot Excel | `bom-b2b-pivot` | `the/B2b.md` |
+| B3 Kiểm toán | `bom-b3-kiem-toan` | `the/B3.md` |
+| B6 Cập nhật mã HQ | `bom-b6-cap-nhat` | `the/B6.md` |
+
 ## Khi DỪNG (chỉ lúc này mới tốn thêm token)
-1. Chạy `chi-tiet <bước>`. Lệnh này in tối đa 20 dòng.
-2. Nếu vẫn chưa rõ nguyên nhân: giao cho **một** sub-agent điều tra (model nhỏ), kèm đúng **một** thẻ `the/<bước>.md` và đầu ra của `chi-tiet`. Sub-agent chỉ được đọc, không được ghi. Sub-agent trả về tối đa 8 dòng theo mẫu: *nguyên nhân – bằng chứng (file, ô) – đề xuất*.
-3. Báo anh rồi chờ lệnh. Khi anh cho phép, chạy `khoi-phuc` rồi `tiep`. Lệnh này chỉ chạy lại **riêng bước lỗi**; các bước đã XONG giữ nguyên.
+1. Chạy `.\dieu_phoi.cmd chi-tiet <bước>`. Lệnh này in tối đa 20 dòng.
+2. Nếu vẫn chưa rõ nguyên nhân: gọi **đúng một** sub-agent theo bảng trên, và chỉ đưa cho nó đầu ra của `chi-tiet`.
+   - Nếu máy không có sẵn sub-agent đặt tên: dùng sub-agent thường (model nhỏ), đưa kèm thẻ `the/<bước>.md` và giới thiệu nó bằng tên trong bảng.
+   - Sub-agent trả về tối đa 8 dòng, theo mẫu `SUB-AGENT / NGUYÊN NHÂN / BẰNG CHỨNG / ĐỀ XUẤT / CHẮC CHẮN`.
+3. bom-dieu-phoi **kiểm duyệt** báo cáo của sub-agent: bằng chứng phải trỏ tới file và ô cụ thể. Nếu ghi "CHẮC CHẮN: CHƯA" thì báo nguyên trạng, không tự suy thêm.
+4. Báo anh rồi chờ lệnh. Khi anh cho phép thì chạy `khoi-phuc`, sau đó `tiep`. Chỉ bước lỗi được chạy lại.
 
 Tuyệt đối không: sửa script, sửa file kết quả bằng tay, bỏ qua chốt, chạy lệnh ngoài danh sách trên, hay đọc toàn bộ file log. Không nạp skill `xu-ly-pi`, `xu-ly-bom` hay `CHOT_KIEM.md`, trừ khi anh hỏi về quy tắc.
 

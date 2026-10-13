@@ -1,0 +1,2 @@
+# Giữ nguyên byte khi clone trên Windows (autocrlf) để SHA1 khớp SHA1SUMS.txt
+* -text
