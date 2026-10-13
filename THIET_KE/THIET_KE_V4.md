@@ -81,3 +81,72 @@ Em **chưa** tự chọn bên nào. Mỗi mục dưới đây cần một quyế
 3. Viết `gac_cong.py` (chỉ đọc) để chấm `CHOT_KIEM.md` theo từng bước. Thử trên cloud trước.
 4. Gắn chốt vào từng script, mỗi lần một script, theo thứ tự 02 → 04 → 00 → 01. Với mỗi script: thử trên 2–3 file mẫu và một bản cố tình làm hỏng, rồi ghim md5.
 5. Thay skill `quy-trinh-bom-toan-trinh` bằng bản v4 (`SKILLS\quy-trinh-bom-toan-trinh\`). Skill `xu-ly-pi` và `xu-ly-bom` chỉ thêm một dòng: "chốt kiểm theo CHOT_KIEM.md của skill toàn trình".
+
+---
+
+## 8. Bản v4.1: điều phối bằng code, tốn token tới đâu trả tới đó
+
+### Vì sao bản cũ tốn token
+- Mỗi lần làm phải nạp cả 4 skill, khoảng 29 KB.
+- Agent đọc nguyên văn kết quả script, có khi hàng trăm dòng.
+- Agent phải tự suy luận để kiểm số liệu.
+- Việc gì cũng giao sub-agent. Mỗi sub-agent khởi động lại từ đầu và nạp lại hướng dẫn.
+
+### Cách v4.1 giải quyết
+| Việc | Trước | v4.1 |
+|---|---|---|
+| Hướng dẫn nạp mỗi lần | 4 skill ≈ 29 KB | `SKILL.md` ≈ 4 KB. Thẻ bước ≈ 1 KB, **chỉ nạp khi bước đó DỪNG** |
+| Kiểm số liệu và nguyên tắc | Agent đọc rồi suy luận | `dieu_phoi.py` và `gac_cong.py` chấm. Agent chỉ đọc ĐẠT hoặc DỪNG |
+| Đầu ra mỗi lệnh | Không giới hạn | Tối đa 12 dòng. Chi tiết nằm trong `NHAT KY`, gọi `chi-tiet` mới mở (tối đa 20 dòng) |
+| Sub-agent | Mỗi bước một sub-agent | Chỉ dùng **khi DỪNG**: một sub-agent điều tra, model nhỏ, nhận một thẻ, trả về tối đa 8 dòng |
+| Chạy lại khi sai | Thường phải làm lại từ đầu | `khoi-phuc` rồi `tiep`: chỉ chạy lại **riêng bước lỗi** |
+| Hội thoại mới | Phải giải thích lại từ đầu | Trạng thái nằm trong `NHAT KY\DIEU_PHOI\<run_id>\TRANG_THAI.tsv`. Chỉ cần gõ `tiep` là chạy tiếp |
+
+Ước tính (chưa đo trên máy), cho một chuỗi chạy trơn 5 bước ở chế độ `--tu-dong`:
+- Khoảng 1 lần nạp skill (≈ 1.000 token) và 2 lệnh (≈ 600 token).
+- Một lần DỪNG tốn thêm khoảng 1.000–3.000 token: `chi-tiet`, một thẻ, có thể thêm một sub-agent.
+
+### Vai trò khi chạy
+```
+anh Thiên ── "chạy toàn trình, duyệt cả chuỗi" ──▶ Agent ĐIỀU PHỐI (skill v4.1)
+                                                     │  gọi 1 lệnh: dieu_phoi.py tiep --den-het
+                                                     ▼
+            dieu_phoi.py = các vai làm việc + Gác cổng bằng code, chạy TUẦN TỰ:
+            B0 → B1 → B2 → B2b → B3
+            mỗi bước: chạy thử → (duyệt) → điểm khôi phục → chạy thật → chấm chốt
+                      → ĐẠT: sang bước kế tiếp | DỪNG: giữ nguyên, báo
+                                                     │
+                     DỪNG ─▶ Agent ĐIỀU PHỐI: chi-tiet → (sub-agent điều tra, chỉ đọc)
+                                              → báo anh → anh cho phép → khoi-phuc → tiep
+```
+Anh duyệt một lần (`--tu-dong`) rồi làm việc khác. Agent chỉ gọi anh khi DỪNG, hoặc khi tới B6 (bước sửa file cũ luôn phải hỏi riêng).
+
+### Điểm khôi phục (theo yêu cầu của anh ngày 13/10)
+- **Trước mỗi bước chạy thật**: chép **mọi file có sẵn** trong vùng ghi của bước, kèm md5, vào `_CHO_XOA\KHOI_PHUC_<run_id>\<bước>\`. Ngoại lệ là hai kho NGUON ở B0: bước đó chỉ thêm file mới, và file cũ bị đặt chỉ đọc trong lúc chạy.
+- **Khi sai**, `khoi-phuc` làm 3 việc:
+  - Dời file của lần lỗi sang `<bước>_LOI_*`, không xoá.
+  - Chép lại bản cũ.
+  - Kiểm md5 toàn vùng phải đúng như trước bước. Không đúng thì báo "KHÔNG trọn vẹn" và giữ nguyên điểm khôi phục.
+- **Chỉ xoá điểm khôi phục khi cả chuỗi ĐẠT**, tức là kiểm toán cuối đã xong. Nhờ vậy, nếu bước sau phát hiện bước trước sai thì vẫn quay lại được. Thư mục `*_LOI_*` không tự xoá.
+- Cần lưu ý dung lượng: bước B2 và B2b chép toàn bộ `BOM SNPL` mỗi lần chạy. Phần này được xoá khi chuỗi đạt.
+
+### Chốt kiểm thêm trong v4.1
+- K.7: script báo lỗi hoặc có Traceback → DỪNG.
+- K.8: hơn 20 % file không đạt chốt MỀM → DỪNG, vì đây là lỗi hệ thống.
+
+### Đã thử trên cloud
+27 ca, tất cả đạt:
+- `test_chot_kiem.py`: 17 ca.
+- `test_dieu_phoi.py`: 10 ca, chạy với script 00→04 giả lập. Gồm các tình huống:
+  - Chạy trọn chuỗi và tự dọn điểm khôi phục.
+  - Chờ duyệt: chưa duyệt thì không ghi gì.
+  - Ghi đè file cũ → DỪNG → khôi phục lấy lại đúng file cũ → chạy lại riêng B2 → hoàn tất.
+  - MAPPING đổi giữa chừng.
+  - Chạy thử mà ghi file.
+  - Ghi ngoài vùng của bước.
+  - Script lỗi giữa chừng rồi khôi phục.
+  - Lệch tổng ở hơn 20 % file.
+  - Bước 2b làm mất công thức cột B.
+  - B6 luôn hỏi riêng.
+
+**Chưa thử được:** chạy trên Windows với script thật, và chế độ chỉ đọc (máy cloud chạy quyền root nên bỏ qua chỉ đọc). Đường dẫn trong `duong_dan()` phải đối chiếu với máy trước lần chạy đầu.

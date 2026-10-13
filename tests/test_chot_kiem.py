@@ -24,6 +24,25 @@ def tao_xlsx(path: Path, o: dict) -> Path:
     return path
 
 
+def tao_xlsx_kieu_excel(path: Path, chu: dict, cong_thuc_chung: bool = False) -> Path:
+    """Dựng xlsx giống Excel lưu: chữ nằm trong sharedStrings, có công thức dùng chung."""
+    sst = list(dict.fromkeys(chu.values()))
+    cells = "".join(f'<c r="{r}" t="s"><v>{sst.index(t)}</v></c>' for r, t in chu.items())
+    if cong_thuc_chung:
+        cells += '<c r="J2"><f t="shared" ref="J2:J3" si="0">IF(H2="",I2,I2*H2)</f><v>1</v></c>'
+        cells += '<c r="J3"><f t="shared" si="0"/><v>2</v></c>'
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("xl/workbook.xml", f'<workbook {ns} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                   '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels",
+                   '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                   '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>')
+        z.writestr("xl/worksheets/sheet1.xml", f'<worksheet {ns}><sheetData><row r="1">{cells}</row></sheetData></worksheet>')
+        z.writestr("xl/sharedStrings.xml", f'<sst {ns}>' + "".join(f"<si><t>{t}</t></si>" for t in sst) + "</sst>")
+    return path
+
+
 class Nen(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
@@ -123,6 +142,23 @@ class TestSoSanhO(Nen):
         b = tao_xlsx(self.td / "b.xlsx", {"A1": 2})
         vp = ck.so_sanh_entry(a, b, cho_phep=[])
         self.assertTrue(any("sheet1.xml" in x for x in vp))
+
+
+class TestKieuExcel(Nen):
+    def test_doc_chu_that_tu_shared_strings(self):
+        x = tao_xlsx_kieu_excel(self.td / "a.xlsx", {"A1": "FG Code", "L2": "KHÔNG CÓ MÃ"})
+        o = ck.doc_o(x)
+        self.assertEqual(o[("Sheet1", "L2")][1], "KHÔNG CÓ MÃ")
+
+    def test_doi_chu_cung_vi_tri_shared_van_bat(self):
+        a = tao_xlsx_kieu_excel(self.td / "a.xlsx", {"D18": "Cái"})
+        b = tao_xlsx_kieu_excel(self.td / "b.xlsx", {"D18": "Bộ"})
+        self.assertEqual(len(ck.so_sanh_o(a, b, lambda s, r: False)), 1)
+
+    def test_cong_thuc_dung_chung_van_la_cong_thuc(self):
+        x = tao_xlsx_kieu_excel(self.td / "a.xlsx", {"A1": "x"}, cong_thuc_chung=True)
+        o = ck.doc_o(x)
+        self.assertEqual(o[("Sheet1", "J3")][0], "=SHARED#0")
 
 
 class TestCongThuc(Nen):

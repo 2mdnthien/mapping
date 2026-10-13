@@ -208,19 +208,45 @@ def _sheet_paths(z: zipfile.ZipFile) -> dict[str, str]:
     return out
 
 
-def doc_o(xlsx: Path) -> dict[tuple[str, str], tuple[str | None, str | None]]:
-    """{(sheet, 'C18'): (công thức, giá trị thô)} — đọc thẳng XML, không qua openpyxl."""
+def _shared_strings(z: zipfile.ZipFile) -> list[str]:
+    try:
+        root = ET.fromstring(z.read("xl/sharedStrings.xml"))
+    except KeyError:
+        return []
+    return ["".join(t.text or "" for t in si.iter(f"{_NS}t")) for si in root.iter(f"{_NS}si")]
+
+
+def doc_o(xlsx: Path, chi_sheet: Iterable[str] | None = None
+          ) -> dict[tuple[str, str], tuple[str | None, str | None]]:
+    """{(sheet, 'C18'): (công thức, giá trị)} — đọc thẳng XML, không qua openpyxl.
+
+    Chữ trong sharedStrings được giải ra chữ thật. Ô theo sau của công thức dùng chung
+    (Excel lưu `<f t="shared" si="n"/>` rỗng) trả về công thức `=SHARED#n`.
+    """
     out = {}
     with zipfile.ZipFile(xlsx) as z:
+        sst = _shared_strings(z)
         for name, part in _sheet_paths(z).items():
+            if chi_sheet is not None and name not in chi_sheet:
+                continue
             root = ET.fromstring(z.read(part))
             for c in root.iter(f"{_NS}c"):
                 f = c.find(f"{_NS}f")
                 v = c.find(f"{_NS}v")
                 isv = c.find(f"{_NS}is")
-                val = v.text if v is not None else (
-                    "".join(t.text or "" for t in isv.iter(f"{_NS}t")) if isv is not None else None)
-                out[(name, c.get("r"))] = (f.text if f is not None else None, val)
+                if isv is not None:
+                    val = "".join(t.text or "" for t in isv.iter(f"{_NS}t"))
+                elif v is not None and c.get("t") == "s" and v.text is not None:
+                    val = sst[int(v.text)]
+                else:
+                    val = v.text if v is not None else None
+                if f is None:
+                    ct = None
+                elif f.text:
+                    ct = f.text
+                else:
+                    ct = f"=SHARED#{f.get('si')}"
+                out[(name, c.get("r"))] = (ct, val)
     return out
 
 
