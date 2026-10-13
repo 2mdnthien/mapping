@@ -102,7 +102,9 @@ class PhienChay:
         self.d = duong_dan(goc)
         nk = self.d["NHAT_KY"]
         if run_id is None:
-            ds = sorted(p.name for p in nk.iterdir() if p.is_dir()) if nk.exists() else []
+            ds = sorted((p for p in nk.iterdir() if p.is_dir()), key=lambda p: (p.stat().st_ctime_ns, p.name)) \
+                if nk.exists() else []
+            ds = [p.name for p in ds]
             if not ds:
                 raise SystemExit("Chưa có phiên. Chạy: dieu_phoi.py bat-dau")
             run_id = ds[-1]
@@ -161,9 +163,16 @@ def bat_dau(goc: Path, ds: str | None, tu_dong: bool, cap_nhat: bool) -> int:
     thieu = [str(p) for p in (d["MAPPING"], d["NK2025"], d["BOM_MAU"], d["SCRIPTS"]) if not p.exists()]
     if thieu:
         return in_gon(["✘ DỪNG [K.0] thiếu đầu vào:"] + thieu, THOAT_DUNG)
-    run_id = time.strftime("%Y%m%d-%H%M%S")
-    td = d["NHAT_KY"] / run_id
-    td.mkdir(parents=True, exist_ok=False)
+    goc_id = time.strftime("%Y%m%d-%H%M%S")
+    run_id, i = goc_id, 1
+    while True:                                   # 2 phiên trong cùng 1 giây -> thêm hậu tố, không đè
+        td = d["NHAT_KY"] / run_id
+        try:
+            td.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            i += 1
+            run_id = f"{goc_id}-{i}"
     with open(td / "CAU_HINH.tsv", "w", encoding="utf-8", newline="\n") as f:
         f.write(f"ds\t{ds or ''}\ntu_dong\t{int(tu_dong)}\nche_do\t{'cap-nhat' if cap_nhat else 'toan-trinh'}\n")
     dong = []
