@@ -201,24 +201,33 @@ def bat_dau(goc: Path, ds: str | None, tu_dong: bool, cap_nhat: bool) -> int:
 
 # ------------------------------------------------------------------ chụp vùng ghi
 
-def chup(goc_vung: list[Path]) -> dict[str, tuple[int, int]]:
+def chup(goc_vung: list[Path], bo: set[Path] = frozenset()) -> dict[str, tuple[int, int]]:
+    """{đường dẫn: (kích thước, giờ sửa)} — chỉ stat, không đọc nội dung; cắt nhánh `bo` ngay khi duyệt."""
     out = {}
+    bo_s = {os.path.normcase(str(x)) for x in bo}
     for v in goc_vung:
         if v.is_file():
             st = v.stat(); out[str(v)] = (st.st_size, st.st_mtime_ns)
         elif v.is_dir():
-            for p in v.rglob("*"):
-                if p.is_file() and not p.name.startswith("~$"):
-                    st = p.stat(); out[str(p)] = (st.st_size, st.st_mtime_ns)
+            for root, dirs, files in os.walk(v):
+                dirs[:] = [x for x in dirs if os.path.normcase(os.path.join(root, x)) not in bo_s]
+                for fn in files:
+                    if fn.startswith("~$"):            # file khoá của Excel đang mở
+                        continue
+                    fp = os.path.join(root, fn)
+                    try:
+                        st = os.stat(fp)
+                    except OSError:
+                        continue
+                    out[fp] = (st.st_size, st.st_mtime_ns)
     return out
 
 
 def chup_toan_vung(d: dict[str, Path]) -> dict[str, tuple[int, int]]:
-    """Mọi chỗ có thể bị ghi nhầm (trừ NHAT KY, _TMP, _CHO_XOA của chính hệ thống)."""
+    """Mọi chỗ có thể bị ghi nhầm. Bỏ hẳn NHAT KY, _TMP, _CHO_XOA (không duyệt vào -> nhanh)."""
     bo = {d["NHAT_KY"], d["TMP"], d["CHO_XOA"]}
     vung = [d["OUT"], d["NGUON_PI"], d["NGUON_CUSTOM"], d["MAPPING"].parent, d["BOM_MAU"].parent, d["SCRIPTS"]]
-    snap = chup(vung)
-    return {k: v for k, v in snap.items() if not any(Path(k).is_relative_to(b) for b in bo)}
+    return chup(vung, bo)
 
 
 # ------------------------------------------------------------------- chạy script
@@ -368,8 +377,12 @@ def thu_muc_kp(ph: PhienChay, b: Buoc) -> Path:
 
 
 def ma_hoa(ph: PhienChay, p: Path) -> Path:
-    """Đường dẫn tương đối so với GOC để lưu trong điểm khôi phục."""
-    return Path(p).relative_to(ph.d["GOC"])
+    """Đường dẫn rút gọn để lưu trong điểm khôi phục (Windows giới hạn 260 ký tự)."""
+    p = Path(p)
+    for k in ("OUT", "NGUON_PI", "NGUON_CUSTOM"):
+        if ph.d[k] in p.parents:
+            return Path(k) / p.relative_to(ph.d[k])
+    return p.relative_to(ph.d["GOC"])
 
 
 def duoc_sua(ph: PhienChay, b: Buoc, p: Path) -> bool:
@@ -525,9 +538,25 @@ def chi_tiet(ph: PhienChay, khoa: str, n: int) -> int:
     return in_gon([l[:200] for l in ls] or [f"Không có dòng nào cho {khoa}."], THOAT_OK)
 
 
+def kiem_duong_dan(goc: Path) -> int:
+    """Chạy đầu tiên trên máy: đường dẫn nào chưa đúng, script nào chưa có, đường dẫn nào sát 260 ký tự."""
+    d = duong_dan(goc)
+    can = ["SCRIPTS", "OUT", "NGUON_PI", "NGUON_CUSTOM", "MAPPING", "NK2025", "BOM_MAU", "BOM_ERP", "BOM_SNPL",
+           "CHO_XU_LY"]
+    thieu = [f"  ✘ {k}: {d[k]}" for k in can if not d[k].exists()]
+    sc = [b.script for b in CHUOI + [BUOC_CAP_NHAT] if not (d["SCRIPTS"] / b.script).exists()]
+    kp = d["CHO_XOA"] / "KHOI_PHUC_20991231-235959-9" / "B2b_LOI_235959" / "OUT"
+    dai = max((len(str(kp)) + len(str(p.relative_to(d["OUT"]))) + 4
+               for p in d["OUT"].rglob("*.xls*")), default=0) if d["OUT"].exists() else 0
+    dong = [f"GỐC {goc}", f"  {len(can) - len(thieu)}/{len(can)} đường dẫn có trên máy"] + thieu
+    dong += [f"  ✘ chưa có script: {', '.join(sc)}"] if sc else ["  ✔ đủ script 00→04"]
+    dong.append(f"  {'✘' if dai > 250 else '✔'} đường dẫn điểm khôi phục dài nhất ≈ {dai} ký tự (giới hạn 260)")
+    return in_gon(dong, THOAT_DUNG if (thieu or dai > 250) else THOAT_OK)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("lenh", choices=["bat-dau", "tiep", "duyet", "trang-thai", "chi-tiet", "khoi-phuc"])
+    ap.add_argument("lenh", choices=["kiem-duong-dan", "bat-dau", "tiep", "duyet", "trang-thai", "chi-tiet", "khoi-phuc"])
     ap.add_argument("khoa", nargs="?")
     ap.add_argument("--goc", default=os.environ.get("AGENTIC_GOC", r"C:\Users\accountsf\Downloads\AGENTIC"))
     ap.add_argument("--run")
@@ -538,6 +567,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--so-dong", type=int, default=20)
     a = ap.parse_args(argv)
     goc = Path(a.goc)
+    if a.lenh == "kiem-duong-dan":
+        return kiem_duong_dan(goc)
     if a.lenh == "bat-dau":
         return bat_dau(goc, a.ds, a.tu_dong, a.cap_nhat)
     ph = PhienChay(goc, a.run)

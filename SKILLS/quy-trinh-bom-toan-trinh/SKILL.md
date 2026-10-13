@@ -7,14 +7,20 @@ description: "Điều phối và kiểm duyệt toàn trình BOM hải quan (Bư
 
 Vai của skill này là **Điều phối và kiểm duyệt**. Skill không tự đọc dữ liệu và không tự cộng số. Việc chấm số liệu và nguyên tắc do script `dieu_phoi.py` làm (Gác cổng bằng code). Agent chỉ đọc kết quả, tối đa 12 dòng mỗi lệnh.
 
-## Lệnh (chạy tại `COWORK\BO_CONG_CU_TU_DONG_HOA_BOM`, dùng Python 3.11)
+## Lệnh (chạy trên máy, PowerShell, thư mục `C:\Users\accountsf\Downloads\AGENTIC\COWORK\BO_CONG_CU_TU_DONG_HOA_BOM`)
 ```
-$PY -X utf8 -B SCRIPTS\dieu_phoi.py bat-dau [--ds <file>] [--tu-dong] [--cap-nhat]
-$PY -X utf8 -B SCRIPTS\dieu_phoi.py tiep --den-het
-$PY -X utf8 -B SCRIPTS\dieu_phoi.py duyet | trang-thai | khoi-phuc | chi-tiet <bước|mã chốt>
+.\dieu_phoi.cmd kiem-duong-dan                      (chỉ chạy lần đầu, hoặc khi đổi máy hay đổi thư mục)
+.\dieu_phoi.cmd bat-dau [--ds <file>] [--tu-dong] [--cap-nhat]
+.\dieu_phoi.cmd tiep --den-het
+.\dieu_phoi.cmd duyet | trang-thai | khoi-phuc | chi-tiet <bước|mã chốt>
 ```
-- `--tu-dong` chỉ dùng khi anh Thiên nói rõ "duyệt cả chuỗi". Khi không có `--tu-dong`, chương trình dừng ở mỗi bước để hỏi.
-- Bước B6 (`--cap-nhat`) luôn phải hỏi riêng.
+- **Không** gõ `$PY` hay bất kỳ biến `$` nào, vì Desktop Commander làm mất ký tự `$`. File `.cmd` đã ghi sẵn đường dẫn Python 3.11.
+- `tiep --den-het` có thể chạy lâu (Excel ở bước 2b, mục 26 lần đầu mất khoảng 5 phút). Cách chạy:
+  - Mở lệnh bằng `start_process`.
+  - Đọc kết quả bằng `read_process_output` mỗi lần khoảng 60 giây, cho tới khi lệnh kết thúc.
+  - **Không chạy lại lệnh khi lệnh đang chạy.**
+- Mã thoát của lệnh: xem dòng `exit code` của Desktop Commander. Nếu không có, nhìn dòng đầu của kết quả: ✔ là 0, ⏸ là 3, ✘ là 2, HOÀN TẤT là 4.
+- `--tu-dong` chỉ dùng khi anh Thiên nói rõ "duyệt cả chuỗi". B6 (`--cap-nhat`) luôn phải hỏi riêng.
 
 ## Vòng làm việc: chỉ làm theo mã thoát
 | Mã thoát | Nghĩa | Việc phải làm |

@@ -117,13 +117,24 @@ class TestChuoi(Cay):
         self.assertTrue((self.d["NGUON_PI"] / "0B000001.pdf").exists())
 
 
+class TestKiemDuongDan(Cay):
+    def test_bao_thieu_duong_dan(self):
+        rc, out = self.lenh("kiem-duong-dan")
+        self.assertEqual(rc, dp.THOAT_DUNG)                 # chưa có BOM ERP, CHỜ XỬ LÝ
+        self.assertIn("BOM_ERP", out)
+        self.d["BOM_ERP"].mkdir(); self.d["CHO_XU_LY"].mkdir()
+        rc, out = self.lenh("kiem-duong-dan")
+        self.assertEqual(rc, dp.THOAT_OK, out)
+
+
 class TestChotChan(Cay):
     def test_ghi_de_bi_dung_khoi_phuc_roi_chay_lai_rieng_buoc(self):
         self.lenh("bat-dau", "--tu-dong")
         os.environ["FAKE"] = "de"
         rc, out = self.lenh("tiep", "--den-het")
         self.assertEqual(rc, dp.THOAT_DUNG, out)
-        self.assertIn("K.4", out)
+        # Linux root bỏ qua chỉ đọc -> bắt sau khi chạy (K.4); Windows chặn ngay khi ghi -> script lỗi (K.7)
+        self.assertTrue("K.4" in out or "K.7" in out, out)
         self.assertIn("B2 ", out)
         rc, out = self.lenh("khoi-phuc")
         self.assertEqual(rc, dp.THOAT_OK, out)
